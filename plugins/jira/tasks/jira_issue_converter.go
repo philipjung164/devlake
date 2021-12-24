@@ -2,7 +2,6 @@ package tasks
 
 import (
 	lakeModels "github.com/merico-dev/lake/models"
-	"github.com/merico-dev/lake/models/domainlayer"
 	"github.com/merico-dev/lake/models/domainlayer/didgen"
 	"github.com/merico-dev/lake/models/domainlayer/ticket"
 	jiraModels "github.com/merico-dev/lake/plugins/jira/models"
@@ -23,10 +22,9 @@ func ConvertIssues(sourceId uint64, boardId uint64) error {
 	}
 	defer cursor.Close()
 
-	boardIdGen := didgen.NewDomainIdGenerator(&jiraModels.JiraBoard{}).Generate(sourceId, boardId)
+	domainBoardId := didgen.NewDomainIdGenerator(&jiraModels.JiraBoard{}).Generate(sourceId, boardId)
 	issueIdGen := didgen.NewDomainIdGenerator(&jiraModels.JiraIssue{})
 	userIdGen := didgen.NewDomainIdGenerator(&jiraModels.JiraUser{})
-	sprintIdGen := didgen.NewDomainIdGenerator(&jiraModels.JiraSprint{})
 
 	// iterate all rows
 	for cursor.Next() {
@@ -35,39 +33,38 @@ func ConvertIssues(sourceId uint64, boardId uint64) error {
 			return err
 		}
 		issue := &ticket.Issue{
-			DomainEntity: domainlayer.DomainEntity{
-				Id: issueIdGen.Generate(jiraIssue.SourceId, jiraIssue.IssueId),
-			},
-			BoardId:                  boardIdGen,
-			Url:                      jiraIssue.Self,
-			Key:                      jiraIssue.Key,
-			Summary:                  jiraIssue.Summary,
-			EpicKey:                  jiraIssue.EpicKey,
-			Type:                     jiraIssue.StdType,
-			Status:                   jiraIssue.StdStatus,
-			StoryPoint:               jiraIssue.StdStoryPoint,
-			OriginalEstimateMinutes:  jiraIssue.OriginalEstimateMinutes,
-			AggregateEstimateMinutes: jiraIssue.AggregateEstimateMinutes,
-			RemainingEstimateMinutes: jiraIssue.RemainingEstimateMinutes,
-			CreatorId:                userIdGen.Generate(sourceId, jiraIssue.CreatorAccountId),
-			ResolutionDate:           jiraIssue.ResolutionDate,
-			Priority:                 jiraIssue.PriorityName,
-			CreatedDate:              jiraIssue.Created,
-			UpdatedDate:              jiraIssue.Updated,
-			LeadTimeMinutes:          jiraIssue.LeadTimeMinutes,
-			SpentMinutes:             jiraIssue.SpentMinutes,
+			Id:                      issueIdGen.Generate(jiraIssue.SourceId, jiraIssue.IssueId),
+			Url:                     jiraIssue.Self,
+			Key:                     jiraIssue.Key,
+			Summary:                 jiraIssue.Summary,
+			EpicKey:                 jiraIssue.EpicKey,
+			Type:                    jiraIssue.StdType,
+			Status:                  jiraIssue.StdStatus,
+			StoryPoint:              jiraIssue.StdStoryPoint,
+			OriginalEstimateMinutes: jiraIssue.OriginalEstimateMinutes,
+			CreatorId:               userIdGen.Generate(sourceId, jiraIssue.CreatorAccountId),
+			ResolutionDate:          jiraIssue.ResolutionDate,
+			Priority:                jiraIssue.PriorityName,
+			CreatedDate:             jiraIssue.Created,
+			UpdatedDate:             jiraIssue.Updated,
+			LeadTimeMinutes:         jiraIssue.LeadTimeMinutes,
 		}
 		if jiraIssue.AssigneeAccountId != "" {
 			issue.AssigneeId = userIdGen.Generate(sourceId, jiraIssue.AssigneeAccountId)
 		}
 		if jiraIssue.ParentId != 0 {
-			issue.ParentId = issueIdGen.Generate(sourceId, jiraIssue.ParentId)
-		}
-		if jiraIssue.SprintId != 0 {
-			issue.SprintId = sprintIdGen.Generate(sourceId, jiraIssue.SprintId)
+			issue.ParentIssueId = issueIdGen.Generate(sourceId, jiraIssue.ParentId)
 		}
 
 		err = lakeModels.Db.Clauses(clause.OnConflict{UpdateAll: true}).Create(issue).Error
+		if err != nil {
+			return err
+		}
+		boardIssue := &ticket.BoardIssue{
+			BoardId: domainBoardId,
+			IssueId: issue.Id,
+		}
+		err = lakeModels.Db.Clauses(clause.OnConflict{DoNothing: true}).Create(boardIssue).Error
 		if err != nil {
 			return err
 		}

@@ -1,11 +1,21 @@
 package ticket
 
-import (
-	"github.com/merico-dev/lake/models/domainlayer"
-)
+import "time"
 
 type Board struct {
-	domainlayer.DomainEntity
-	Name string
-	Url  string
+	Id          string `gorm:"primaryKey"`
+	Name        string
+	Description string
+	Url         string
+	CreatedDate time.Time
+}
+
+type BoardIssue struct {
+	BoardId string `gorm:"primaryKey"`
+	IssueId string `gorm:"primaryKey"`
+}
+
+type BoardSprint struct {
+	BoardId  string `gorm:"primaryKey"`
+	SprintId string `gorm:"primaryKey"`
 }
